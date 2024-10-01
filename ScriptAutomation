@@ -2,50 +2,42 @@ alias: Regola Potenza AC EcoFlow Delta 2
 description: Regola la potenza di carica AC in base all'energia esportata in rete
 trigger:
   - platform: time_pattern
-    seconds: /10
+    seconds: "/10"  # L'automazione si attiva ogni 10 secondi
 condition: []
 action:
   - variables:
+      # Legge la potenza attuale scambiata con la rete o utilizza il sensore di backup se necessario
       grid_power: >
-        {% set gp = states('sensor.generale_total_active_power') %} {% if gp not
-        in ['unknown', 'unavailable', 'none', 'None', '', None] %}
+        {% set gp = states('sensor.generale_total_active_power') %}
+        {% if gp not in ['unknown', 'unavailable', 'none', 'None', '', None] %}
           {{ gp | float }}
         {% else %}
           {{ states('sensor.shellyem3_483fdac3d228_channel_a_power') | float }}
         {% endif %}
-      max_charging_power: 2400
-      min_charging_power: 200
+      max_charging_power: 2400  # Potenza massima di carica consentita (2400W)
+      min_charging_power: 200   # Potenza minima di carica consentita (200W)
   - choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ grid_power > -200 }}"
+      - conditions: "{{ grid_power > -200 }}"  # Se l'esportazione è inferiore a 200W (grid_power > -200)
         sequence:
-          - target:
-              entity_id: switch.carico_batteria_ecoflow
-            action: switch.turn_off
-            data: {}
-      - conditions:
-          - condition: template
-            value_template: "{{ grid_power <= -200 }}"
+          - service: switch.turn_off
+            target:
+              entity_id: switch.carico_batteria_ecoflow  # Spegne la carica della batteria EcoFlow
+      - conditions: "{{ grid_power <= -200 }}"  # Se l'esportazione è di almeno 200W (grid_power <= -200)
         sequence:
-          - target:
-              entity_id: switch.carico_batteria_ecoflow
-            action: switch.turn_on
-            data: {}
-          - target:
-              entity_id: number.delta_2_max_0411_ac_charging_power
+          - service: switch.turn_on
+            target:
+              entity_id: switch.carico_batteria_ecoflow  # Accende la carica della batteria EcoFlow
+          - service: number.set_value
+            target:
+              entity_id: number.delta_2_max_0411_ac_charging_power  # Imposta la potenza di carica AC
             data:
               value: >
-                {% set exported_power = -grid_power %}  {# Calcola la potenza
-                esportata (valore positivo) #} {% if exported_power >
-                max_charging_power %}  {# Se l'esportazione supera la potenza
-                massima consentita #}
+                {% set exported_power = -grid_power %}  {# Calcola la potenza esportata (valore positivo) #}
+                {% if exported_power > max_charging_power %}  {# Se l'esportazione supera la potenza massima consentita #}
                   {{ max_charging_power }}  {# Imposta la potenza di carica al massimo consentito #}
-                {% elif exported_power < min_charging_power %}  {# Se
-                l'esportazione è inferiore alla potenza minima consentita #}
+                {% elif exported_power < min_charging_power %}  {# Se l'esportazione è inferiore alla potenza minima consentita #}
                   {{ min_charging_power }}  {# Imposta la potenza di carica al minimo consentito #}
                 {% else %}
                   {{ exported_power | int }}  {# Imposta la potenza di carica pari alla potenza esportata #}
                 {% endif %}
-            action: number.set_value
 mode: single
